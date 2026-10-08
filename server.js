@@ -30,7 +30,7 @@ function getAuth() {
   return new google.auth.JWT({
     email,
     key: formattedKey,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 }
 
@@ -315,6 +315,66 @@ app.get('/api/finances', async (_req, res) => {
 
   } catch (err) {
     console.error('❌ Error fetching Google Sheets data:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Add New Transaction Endpoint ---
+app.post('/api/transactions', async (req, res) => {
+  try {
+    const { nome, categoria, importo, data, tipo } = req.body;
+
+    if (!categoria || importo === undefined) {
+      return res.status(400).json({ error: 'Categoria e importo sono obbligatori.' });
+    }
+
+    const auth = getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+
+    if (!spreadsheetId) {
+      return res.status(500).json({ error: 'Missing GOOGLE_SPREADSHEET_ID in .env' });
+    }
+
+    // Format date as DD/MM/YYYY for Italian locale in Google Sheets
+    let dateFormatted = '';
+    if (data) {
+      const d = new Date(data);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = d.getUTCFullYear();
+        dateFormatted = `${day}/${month}/${year}`;
+      } else {
+        dateFormatted = data;
+      }
+    } else {
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      dateFormatted = `${day}/${month}/${now.getFullYear()}`;
+    }
+
+    const rowValue = [
+      nome || '',
+      categoria || '',
+      importo,
+      dateFormatted,
+      tipo || 'Spesa'
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Lista Movimenti!A:E',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [rowValue]
+      }
+    });
+
+    res.json({ success: true, message: 'Transazione aggiunta con successo su Google Sheets' });
+  } catch (err) {
+    console.error('❌ Error adding transaction to Google Sheets:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

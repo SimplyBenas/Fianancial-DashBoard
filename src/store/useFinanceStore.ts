@@ -31,6 +31,7 @@ interface FinanceState {
 
   // Actions
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
+  createTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
   deleteTransaction: (id: string) => void;
   setSelectedMonth: (month: number) => void;
   setSelectedYear: (year: number) => void;
@@ -52,7 +53,7 @@ const FALLBACK_SETTINGS: Settings = {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
-export const useFinanceStore = create<FinanceState>((set) => ({
+export const useFinanceStore = create<FinanceState>((set, get) => ({
   transactions: [],
   sinkingFunds: [],
   assets: [],
@@ -68,6 +69,19 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   addTransaction: (tx) => set((state) => ({
     transactions: [{ ...tx, id: Math.random().toString(36).substring(7) }, ...state.transactions]
   })),
+
+  createTransaction: async (tx) => {
+    const res = await fetch(`${API_BASE}/api/transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Errore durante la creazione della transazione');
+    }
+    await get().fetchDashboardData();
+  },
 
   deleteTransaction: (id) => set((state) => ({
     transactions: state.transactions.filter(t => t.id !== id)
